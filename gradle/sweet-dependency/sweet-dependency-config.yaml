@@ -34,7 +34,6 @@ repositories:
 
 versions:
   accompanist: 0.34.0
-  appcenter: 5.0.4
   hilt: 2.46.1
   kotlin: 1.9.22
   sketch: 3.3.0
@@ -370,16 +369,6 @@ libraries:
       version: 10.2.3
     butterknife-compiler:
       version: 10.2.3
-  com.microsoft.appcenter:
-    appcenter-analytics:
-      alias: appcenter-analytics
-      version-ref: appcenter
-    appcenter-crashes:
-      alias: appcenter-crashes
-      version-ref: appcenter
-    appcenter-distribute:
-      alias: appcenter-distribute
-      version-ref: appcenter
   androidx.compose.runtime:
     runtime-tracing:
       alias: compose-runtime-tracing
