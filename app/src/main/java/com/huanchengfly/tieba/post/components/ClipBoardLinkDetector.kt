@@ -85,9 +85,13 @@ object ClipBoardLinkDetector : Application.ActivityLifecycleCallbacks {
                 val kw = uri.getQueryParameter("kw")
                 val word = uri.getQueryParameter("word")
                 val kz = uri.getQueryParameter("kz")
-                kw?.let { ClipBoardForumLink(url, it) }
-                    ?: (word?.let { ClipBoardForumLink(url, it) }
-                        ?: kz?.let { ClipBoardThreadLink(url, it) })
+
+                when {
+                    !kw.isNullOrEmpty() -> ClipBoardForumLink(url, kw)
+                    !word.isNullOrEmpty() -> ClipBoardForumLink(url, word)
+                    !kz.isNullOrEmpty() -> ClipBoardThreadLink(url, kz)
+                    else -> null
+                }
             }
 
             else -> ClipBoardLink(url)
