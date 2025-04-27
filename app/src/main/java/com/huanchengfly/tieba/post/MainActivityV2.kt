@@ -243,6 +243,20 @@ class MainActivityV2 : BaseComposeActivity() {
                 }
             }
             true
+        } else return if (intent.data?.host == "tieba.baidu.com") {
+            val uri = intent.data!!
+            when {
+                uri.path.orEmpty().lowercase() == "/f" -> {
+                    val forumName = uri.getQueryParameter("kw") ?: return true
+                    navigate(ForumPageDestination(forumName))
+                }
+
+                uri.path.orEmpty().lowercase().startsWith("/p/") -> {
+                    val threadId = uri.pathSegments.getOrNull(1)?.toLongOrNull() ?: return true
+                    navigate(ThreadPageDestination(threadId))
+                }
+            }
+            true
         } else {
             false
         }
