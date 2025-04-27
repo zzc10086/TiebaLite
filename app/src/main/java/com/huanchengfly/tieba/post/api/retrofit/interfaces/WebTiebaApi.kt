@@ -32,7 +32,7 @@ interface WebTiebaApi {
     @Headers(
         "${Header.FORCE_LOGIN}: ${Header.FORCE_LOGIN_TRUE}",
         "${Header.REFERER}: https://tieba.baidu.com/index/tbwise/forum?source=index",
-        "sec-ch-ua: \".Not/A)Brand\";v=\"99\", \"Microsoft Edge\";v=\"103\", \"Chromium\";v=\"103\"",
+        "sec-ch-ua: \".Not/A)Brand\";v=\"8\", \"Microsoft Edge\";v=\"135\", \"Chromium\";v=\"135\"",
         "sec-ch-ua-mobile: ?1",
         "sec-ch-ua-platform: Android"
     )
@@ -48,7 +48,7 @@ interface WebTiebaApi {
     @Headers(
         "${Header.FORCE_LOGIN}: ${Header.FORCE_LOGIN_TRUE}",
         "${Header.REFERER}: https://tieba.baidu.com/index/tbwise/mine?source=index",
-        "sec-ch-ua: \".Not/A)Brand\";v=\"99\", \"Microsoft Edge\";v=\"103\", \"Chromium\";v=\"103\"",
+        "sec-ch-ua: \".Not/A)Brand\";v=\"8\", \"Microsoft Edge\";v=\"135\", \"Chromium\";v=\"135\"",
         "sec-ch-ua-mobile: ?1",
         "sec-ch-ua-platform: Android"
     )
