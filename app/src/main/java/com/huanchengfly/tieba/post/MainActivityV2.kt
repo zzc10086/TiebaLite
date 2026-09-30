@@ -109,6 +109,7 @@ import com.huanchengfly.tieba.post.utils.newIntentFilter
 import com.huanchengfly.tieba.post.utils.registerPickMediasLauncher
 import com.huanchengfly.tieba.post.utils.requestIgnoreBatteryOptimizations
 import com.huanchengfly.tieba.post.utils.requestPermission
+import com.huanchengfly.tieba.post.utils.shouldUsePhotoPicker
 import com.ramcosta.composedestinations.DestinationsNavHost
 import com.ramcosta.composedestinations.animations.defaults.RootNavGraphDefaultAnimations
 import com.ramcosta.composedestinations.animations.rememberAnimatedNavHostEngine
@@ -461,10 +462,30 @@ class MainActivityV2 : BaseComposeActivity() {
             if (appPreferences.autoSign && !isIgnoringBatteryOptimizations() && !appPreferences.ignoreBatteryOptimizationsDialog) {
                 okSignAlertDialogState.show()
             }
-            onGlobalEvent<GlobalEvent.StartSelectImages> {
-                pickMediasLauncher.launch(
-                    PickMediasRequest(it.id, it.maxCount, it.mediaType)
-                )
+            onGlobalEvent<GlobalEvent.StartSelectImages> { event ->
+                val request = PickMediasRequest(event.id, event.maxCount, event.mediaType)
+                if (shouldUsePhotoPicker()) {
+                    pickMediasLauncher.launch(request)
+                } else {
+                    // Without the system photo picker we fall back to Matisse, which queries
+                    // MediaStore directly. On Android 9 and below that throws SecurityException
+                    // (and crashes the app) when storage permission has not been granted yet.
+                    requestPermission {
+                        permissions = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            listOf(
+                                PermissionUtils.READ_EXTERNAL_STORAGE,
+                                PermissionUtils.WRITE_EXTERNAL_STORAGE
+                            )
+                        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                            listOf(PermissionUtils.READ_EXTERNAL_STORAGE)
+                        } else {
+                            listOf(PermissionUtils.READ_MEDIA_IMAGES)
+                        }
+                        description = getString(R.string.tip_permission_storage)
+                        onGranted = { pickMediasLauncher.launch(request) }
+                        onDenied = { toastShort(R.string.toast_no_permission_insert_photo) }
+                    }
+                }
             }
             onGlobalEvent<GlobalEvent.StartActivityForResult> {
                 mLaunchActivityForResultLauncher.launch(
