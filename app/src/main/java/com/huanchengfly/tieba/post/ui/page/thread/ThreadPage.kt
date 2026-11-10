@@ -5,7 +5,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,12 +78,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -416,6 +419,25 @@ data class ThreadPageFromStoreExtra(
     val maxFloor: Int,
 ) : ThreadPageExtra
 
+/**
+ * 工具条在列表里的序号：0 是一楼，1 是工具条。
+ * 滚过它之后不再用 stickyHeader 叠在楼层上，而是放到列表上方。
+ */
+private const val ThreadHeaderItemIndex = 1
+
+/**
+ * TalkBack 线性顺序，和吸顶后的屏幕位置无关。
+ * 数值越小越先读；同一档内仍按原来的几何顺序。
+ */
+private const val ThreadTraversalFirstPost = 0f
+private const val ThreadTraversalHeader = 1f
+private const val ThreadTraversalContent = 2f
+
+private fun Modifier.threadListTraversal(index: Float): Modifier = semantics {
+    isTraversalGroup = true
+    traversalIndex = index
+}
+
 @Composable
 private fun ThreadLoadMoreIndicator(
     isLoading: Boolean,
@@ -481,7 +503,7 @@ private fun ThreadLoadMoreIndicator(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Destination(
     deepLinks = [
         DeepLink(uriPattern = "tblite://thread/{threadId}"),
@@ -1221,7 +1243,9 @@ fun ThreadPage(
         if (latestPosts.isNotEmpty()) {
             if (!desc) {
                 item("LatestPostsTip") {
-                    Container {
+                    Container(
+                        modifier = Modifier.threadListTraversal(ThreadTraversalContent)
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1244,7 +1268,9 @@ fun ThreadPage(
                 items = latestPosts,
                 key = { (item) -> "LatestPost_${item.get { id }}" }
             ) { (item, blocked, renders, subPosts) ->
-                Container {
+                Container(
+                    modifier = Modifier.threadListTraversal(ThreadTraversalContent)
+                ) {
                     PostCard(
                         item,
                         renders,
@@ -1255,7 +1281,9 @@ fun ThreadPage(
             }
             if (desc) {
                 item("LatestPostsTip") {
-                    Container {
+                    Container(
+                        modifier = Modifier.threadListTraversal(ThreadTraversalContent)
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1272,6 +1300,132 @@ fun ThreadPage(
                             VerticalDivider(modifier = Modifier.weight(1f))
                         }
                     }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ThreadHeaderBar() {
+        Container(
+            modifier = Modifier.threadListTraversal(ThreadTraversalHeader)
+        ) {
+            Row(
+                modifier = Modifier
+                    .background(MaterialTheme.colors.background)
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.height(IntrinsicSize.Min)
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.title_thread_header,
+                            "${thread?.get { replyNum - 1 } ?: 0}"),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .debounceClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                enabled = isSeeLz,
+                                onClick = {
+                                    if (isSeeLz) {
+                                        viewModel.send(
+                                            ThreadUiIntent.LoadFirstPage(
+                                                threadId = threadId,
+                                                forumId = forumId,
+                                                seeLz = false,
+                                                sortType = curSortType
+                                            )
+                                        )
+                                    }
+                                }),
+                        fontSize = 13.sp,
+                        fontWeight = if (!isSeeLz) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (!isSeeLz) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
+                    )
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(R.string.title_see_lz),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .debounceClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                enabled = !isSeeLz,
+                                indication = null,
+                                onClick = {
+                                    if (!isSeeLz) {
+                                        viewModel.send(
+                                            ThreadUiIntent.LoadFirstPage(
+                                                threadId = threadId,
+                                                forumId = forumId,
+                                                seeLz = true,
+                                                sortType = curSortType
+                                            )
+                                        )
+                                    }
+                                }),
+                        fontSize = 13.sp,
+                        fontWeight = if (isSeeLz) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSeeLz) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.height(IntrinsicSize.Min)
+                ) {
+                    Text(
+                        text = stringResource(R.string.title_asc),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .debounceClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                enabled = (curSortType == 1),
+                                indication = null,
+                                onClick = {
+                                    if (curSortType == 1) {
+                                        viewModel.send(
+                                            ThreadUiIntent.LoadFirstPage(
+                                                threadId = threadId,
+                                                forumId = forumId,
+                                                seeLz = isSeeLz,
+                                                sortType = 0
+                                            )
+                                        )
+                                    }
+                                }),
+                        fontSize = 13.sp,
+                        fontWeight = if (curSortType == 0) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (curSortType == 0) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
+                    )
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(R.string.title_desc),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .debounceClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                enabled = (curSortType == 0),
+                                indication = null,
+                                onClick = {
+                                    if (curSortType == 0) {
+                                        viewModel.send(
+                                            ThreadUiIntent.LoadFirstPage(
+                                                threadId = threadId,
+                                                forumId = forumId,
+                                                seeLz = isSeeLz,
+                                                sortType = 1
+                                            )
+                                        )
+                                    }
+                                }),
+                        fontSize = 13.sp,
+                        fontWeight = if (curSortType == 1) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (curSortType == 1) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
+                    )
                 }
             }
         }
@@ -1529,13 +1683,37 @@ fun ThreadPage(
                             isEmpty = data.isEmpty(),
                             preloadCount = loadMorePreloadCount,
                         ) {
-                            MyLazyColumn(
-                                state = lazyListState,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            var headerPinned by remember { mutableStateOf(false) }
+                            LaunchedEffect(lazyListState) {
+                                snapshotFlow {
+                                    lazyListState.firstVisibleItemIndex to
+                                        lazyListState.firstVisibleItemScrollOffset
+                                }.collect { (index, offset) ->
+                                    headerPinned = when {
+                                        index == 0 -> false
+                                        index > ThreadHeaderItemIndex || offset > 0 -> true
+                                        else -> headerPinned
+                                    }
+                                }
+                            }
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                if (headerPinned) {
+                                    ThreadHeaderBar()
+                                }
+                                MyLazyColumn(
+                                    state = lazyListState,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .semantics { isTraversalGroup = true }
+                                ) {
                                 item(key = "FirstPost") {
                                     if (firstPost != null) {
-                                        Container {
+                                        Container(
+                                            modifier = Modifier.threadListTraversal(
+                                                ThreadTraversalFirstPost
+                                            )
+                                        ) {
                                             Column {
                                                 PostCard(
                                                     postHolder = firstPost!!,
@@ -1629,138 +1807,9 @@ fun ThreadPage(
                                         }
                                     }
                                 }
-                                stickyHeader(key = "ThreadHeader") {
-                                    Container {
-                                        Row(
-                                            modifier = Modifier
-                                                .background(MaterialTheme.colors.background)
-                                                .padding(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-//                                            Text(
-//                                                text = stringResource(
-//                                                    R.string.title_thread_header,
-//                                                    "${thread?.get { replyNum - 1 } ?: 0}"),
-//                                                fontSize = 13.sp,
-//                                                fontWeight = FontWeight.Bold,
-//                                                color = ExtendedTheme.colors.text,
-//                                                modifier = Modifier.padding(horizontal = 8.dp),
-//                                            )
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.height(IntrinsicSize.Min)
-                                            ) {
-                                                Text(
-                                                    text = stringResource(
-                                                        R.string.title_thread_header,
-                                                        "${thread?.get { replyNum - 1 } ?: 0}"),
-                                                    modifier = Modifier
-                                                        .padding(horizontal = 8.dp)
-                                                        .debounceClickable(
-                                                            interactionSource = remember { MutableInteractionSource() },
-                                                            indication = null,
-                                                            enabled = isSeeLz,
-                                                            onClick = {
-                                                                if (isSeeLz) {
-                                                                    viewModel.send(
-                                                                        ThreadUiIntent.LoadFirstPage(
-                                                                            threadId = threadId,
-                                                                            forumId = forumId,
-                                                                            seeLz = false,
-                                                                            sortType = curSortType
-                                                                        )
-                                                                    )
-                                                                }
-                                                            }),
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (!isSeeLz) FontWeight.SemiBold else FontWeight.Normal,
-                                                    color = if (!isSeeLz) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
-                                                )
-                                                HorizontalDivider()
-                                                Text(
-                                                    text = stringResource(R.string.title_see_lz),
-                                                    modifier = Modifier
-                                                        .padding(horizontal = 8.dp)
-                                                        .debounceClickable(
-                                                            interactionSource = remember { MutableInteractionSource() },
-                                                            enabled = !isSeeLz,
-                                                            indication = null,
-                                                            onClick =
-                                                                {
-                                                                    if (!isSeeLz) {
-                                                                        viewModel.send(
-                                                                            ThreadUiIntent.LoadFirstPage(
-                                                                                threadId = threadId,
-                                                                                forumId = forumId,
-                                                                                seeLz = true,
-                                                                                sortType = curSortType
-                                                                            )
-                                                                        )
-                                                                    }
-                                                                }),
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (isSeeLz) FontWeight.SemiBold else FontWeight.Normal,
-                                                    color = if (isSeeLz) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.height(IntrinsicSize.Min)
-                                            ) {
-                                                Text(
-                                                    text = stringResource(R.string.title_asc),
-                                                    modifier = Modifier
-                                                        .padding(horizontal = 8.dp)
-                                                        .debounceClickable(
-                                                            interactionSource = remember { MutableInteractionSource() },
-                                                            enabled = (curSortType == 1),
-                                                            indication = null,
-                                                            onClick =
-                                                                {
-                                                                    if (curSortType == 1) {
-                                                                        viewModel.send(
-                                                                            ThreadUiIntent.LoadFirstPage(
-                                                                                threadId = threadId,
-                                                                                forumId = forumId,
-                                                                                seeLz = isSeeLz,
-                                                                                sortType = 0
-                                                                            )
-                                                                        )
-                                                                    }
-                                                                }),
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (curSortType == 0) FontWeight.SemiBold else FontWeight.Normal,
-                                                    color = if (curSortType == 0) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
-                                                )
-                                                HorizontalDivider()
-                                                Text(
-                                                    text = stringResource(R.string.title_desc),
-                                                    modifier = Modifier
-                                                        .padding(horizontal = 8.dp)
-                                                        .debounceClickable(
-                                                            interactionSource = remember { MutableInteractionSource() },
-                                                            enabled = (curSortType == 0),
-                                                            indication = null,
-                                                            onClick =
-                                                                {
-                                                                    if (curSortType == 0) {
-                                                                        viewModel.send(
-                                                                            ThreadUiIntent.LoadFirstPage(
-                                                                                threadId = threadId,
-                                                                                forumId = forumId,
-                                                                                seeLz = isSeeLz,
-                                                                                sortType = 1
-                                                                            )
-                                                                        )
-                                                                    }
-                                                                }),
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (curSortType == 1) FontWeight.SemiBold else FontWeight.Normal,
-                                                    color = if (curSortType == 1) ExtendedTheme.colors.text else ExtendedTheme.colors.textSecondary,
-                                                )
-                                            }
-                                        }
+                                item(key = "ThreadHeader") {
+                                    if (!headerPinned) {
+                                        ThreadHeaderBar()
                                     }
                                 }
                                 if (curSortType == ThreadSortType.SORT_TYPE_DESC) {
@@ -1768,7 +1817,11 @@ fun ThreadPage(
                                 }
                                 item(key = "LoadPreviousBtn") {
                                     if (hasPrevious) {
-                                        Container {
+                                        Container(
+                                            modifier = Modifier.threadListTraversal(
+                                                ThreadTraversalContent
+                                            )
+                                        ) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -1809,7 +1862,11 @@ fun ThreadPage(
                                 }
                                 if (!isRefreshing && data.isEmpty()) {
                                     item(key = "EmptyTip") {
-                                        Container {
+                                        Container(
+                                            modifier = Modifier.threadListTraversal(
+                                                ThreadTraversalContent
+                                            )
+                                        ) {
                                             TipScreen(
                                                 title = { Text(text = stringResource(id = R.string.title_empty)) },
                                                 image = {
@@ -1841,7 +1898,11 @@ fun ThreadPage(
                                         items = data,
                                         key = { (item) -> "Post_${item.get { id }}" }
                                     ) { (item, blocked, renders, subPosts) ->
-                                        Container {
+                                        Container(
+                                            modifier = Modifier.threadListTraversal(
+                                                ThreadTraversalContent
+                                            )
+                                        ) {
                                             PostCard(
                                                 item,
                                                 renders,
@@ -1853,6 +1914,7 @@ fun ThreadPage(
                                 }
                                 if (curSortType != ThreadSortType.SORT_TYPE_DESC) {
                                     latestPosts(false)
+                                }
                                 }
                             }
                         }
