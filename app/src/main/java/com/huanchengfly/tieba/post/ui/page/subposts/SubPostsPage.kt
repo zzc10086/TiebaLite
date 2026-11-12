@@ -51,6 +51,7 @@ import com.huanchengfly.tieba.post.arch.collectPartialAsState
 import com.huanchengfly.tieba.post.arch.onEvent
 import com.huanchengfly.tieba.post.arch.pageViewModel
 import com.huanchengfly.tieba.post.arch.wrapImmutable
+import com.huanchengfly.tieba.post.ui.common.PicContentRender
 import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import com.huanchengfly.tieba.post.ui.common.theme.compose.threadBottomBar
 import com.huanchengfly.tieba.post.ui.page.LocalNavigator
@@ -63,6 +64,7 @@ import com.huanchengfly.tieba.post.ui.page.reply.ReplyDialog
 import com.huanchengfly.tieba.post.ui.page.thread.PostAgreeBtn
 import com.huanchengfly.tieba.post.ui.page.thread.PostCard
 import com.huanchengfly.tieba.post.ui.page.thread.UserNameText
+import com.huanchengfly.tieba.post.ui.utils.getPhotoViewData
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.BlockTip
 import com.huanchengfly.tieba.post.ui.widgets.compose.BlockableContent
@@ -508,6 +510,10 @@ internal fun SubPostsContent(
                             item = item,
                             canDelete = { it.author_id == account?.uid?.toLongOrNull() || it.author?.id == account?.uid?.toLongOrNull() || thread?.get { author?.id } ==  account?.uid?.toLongOrNull() },
                             threadAuthorId = thread?.get { author?.id },
+                            forumId = forum?.get { id } ?: forumId,
+                            forumName = forum?.get { name } ?: "",
+                            threadId = threadId,
+                            postId = post?.get { id } ?: postId,
                             onUserClick = {
                                 navigator.navigate(UserProfilePageDestination(it.id))
                             },
@@ -575,6 +581,10 @@ private fun getDescText(
 private fun SubPostItem(
     item: SubPostItemData,
     threadAuthorId: Long? = null,
+    forumId: Long = 0L,
+    forumName: String = "",
+    threadId: Long = 0L,
+    postId: Long = 0L,
     canDelete: (SubPostList) -> Boolean = { false },
     onUserClick: (User) -> Unit = {},
     onAgree: (SubPostList) -> Unit = {},
@@ -583,6 +593,36 @@ private fun SubPostItem(
     onMenuDeleteClick: ((SubPostList) -> Unit)? = null,
 ) {
     val (subPost, contentRenders, blocked) = item
+    // 楼中楼内容由 PbContent.renders 直接生成，默认不携带 PhotoViewData，
+    // 导致图片无法点击全屏（点击事件会冒泡到外层 LongClickMenu 的回复操作）。
+    // 这里补上与楼层一致的 PhotoViewData，使楼中楼图片可正常全屏查看。
+    val contentRendersWithPhotoViewData = remember(
+        contentRenders, forumId, forumName, threadId, postId
+    ) {
+        if (forumId == 0L || threadId == 0L) {
+            contentRenders
+        } else {
+            contentRenders.map { render ->
+                if (render is PicContentRender && render.photoViewData == null) {
+                    render.copy(
+                        photoViewData = getPhotoViewData(
+                            forumId = forumId,
+                            forumName = forumName,
+                            threadId = threadId,
+                            postId = postId,
+                            picId = render.picId,
+                            picUrl = render.picUrl,
+                            originUrl = render.originUrl,
+                            showOriginBtn = render.showOriginBtn,
+                            originSize = render.originSize
+                        )
+                    )
+                } else {
+                    render
+                }
+            }
+        }
+    }
     val context = LocalContext.current
     val navigator = LocalNavigator.current
     val account = LocalAccount.current
@@ -704,7 +744,7 @@ private fun SubPostItem(
                             .padding(start = Sizes.Small + 8.dp)
                             .fillMaxWidth()
                     ) {
-                        contentRenders.fastForEach { it.Render() }
+                        contentRendersWithPhotoViewData.fastForEach { it.Render() }
                     }
                 }
             )

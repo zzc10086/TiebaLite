@@ -11,21 +11,23 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 
 fun getPhotoViewData(
-    post: Post,
+    forumId: Long,
+    forumName: String,
+    threadId: Long,
+    postId: Long,
     picId: String,
     picUrl: String,
     originUrl: String,
     showOriginBtn: Boolean,
     originSize: Int,
     seeLz: Boolean = false
-): PhotoViewData? {
-    if (post.from_forum == null) return null
+): PhotoViewData {
     return PhotoViewData(
         data = LoadPicPageData(
-            forumId = post.from_forum.id,
-            forumName = post.from_forum.name,
-            threadId = post.tid,
-            postId = post.id,
+            forumId = forumId,
+            forumName = forumName,
+            threadId = threadId,
+            postId = postId,
             objType = "pb",
             picId = picId,
             picIndex = 1,
@@ -40,9 +42,33 @@ fun getPhotoViewData(
                 originUrl = originUrl,
                 showOriginBtn = showOriginBtn,
                 originSize = originSize,
-                postId = post.id
+                postId = postId
             )
         )
+    )
+}
+
+fun getPhotoViewData(
+    post: Post,
+    picId: String,
+    picUrl: String,
+    originUrl: String,
+    showOriginBtn: Boolean,
+    originSize: Int,
+    seeLz: Boolean = false
+): PhotoViewData? {
+    val forum = post.from_forum ?: return null
+    return getPhotoViewData(
+        forumId = forum.id,
+        forumName = forum.name,
+        threadId = post.tid,
+        postId = post.id,
+        picId = picId,
+        picUrl = picUrl,
+        originUrl = originUrl,
+        showOriginBtn = showOriginBtn,
+        originSize = originSize,
+        seeLz = seeLz
     )
 }
 
