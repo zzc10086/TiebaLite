@@ -63,6 +63,7 @@ import com.huanchengfly.tieba.post.ui.page.reply.ReplyDialog
 import com.huanchengfly.tieba.post.ui.page.thread.PostAgreeBtn
 import com.huanchengfly.tieba.post.ui.page.thread.PostCard
 import com.huanchengfly.tieba.post.ui.page.thread.UserNameText
+import com.huanchengfly.tieba.post.ui.utils.withPhotoViewData
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.BlockTip
 import com.huanchengfly.tieba.post.ui.widgets.compose.BlockableContent
@@ -214,6 +215,23 @@ internal fun SubPostsContent(
         prop1 = SubPostsUiState::hasMore,
         initial = true
     )
+
+    val floorPostId = post?.get { id } ?: postId
+    val contentForumId = forum?.get { id } ?: forumId
+    val contentForumName = forum?.get { name } ?: ""
+    // pb/floor 响应不携带 from_forum/tid，Post.contentRenders 无法生成
+    // PhotoViewData，导致楼层图片点击无效。这里按页面已知的 forum/thread
+    // 上下文为楼层内容补齐 PhotoViewData。
+    val postContentRendersWithPhotoViewData = remember(
+        postContentRenders, contentForumId, contentForumName, threadId, floorPostId
+    ) {
+        postContentRenders.withPhotoViewData(
+            forumId = contentForumId,
+            forumName = contentForumName,
+            threadId = threadId,
+            postId = floorPostId
+        )
+    }
 
     val lazyListState = rememberLazyListState()
 
@@ -437,7 +455,7 @@ internal fun SubPostsContent(
                             Column {
                                 PostCard(
                                     postHolder = it,
-                                    contentRenders = postContentRenders,
+                                    contentRenders = postContentRendersWithPhotoViewData,
                                     canDelete = { it.author_id == account?.uid?.toLongOrNull() || it.author?.id == account?.uid?.toLongOrNull() || thread?.get { author?.id } ==  account?.uid?.toLongOrNull() },
                                         showSubPosts = false,
                                     onUserClick = {
@@ -508,6 +526,10 @@ internal fun SubPostsContent(
                             item = item,
                             canDelete = { it.author_id == account?.uid?.toLongOrNull() || it.author?.id == account?.uid?.toLongOrNull() || thread?.get { author?.id } ==  account?.uid?.toLongOrNull() },
                             threadAuthorId = thread?.get { author?.id },
+                            forumId = contentForumId,
+                            forumName = contentForumName,
+                            threadId = threadId,
+                            postId = floorPostId,
                             onUserClick = {
                                 navigator.navigate(UserProfilePageDestination(it.id))
                             },
@@ -575,6 +597,10 @@ private fun getDescText(
 private fun SubPostItem(
     item: SubPostItemData,
     threadAuthorId: Long? = null,
+    forumId: Long = 0L,
+    forumName: String = "",
+    threadId: Long = 0L,
+    postId: Long = 0L,
     canDelete: (SubPostList) -> Boolean = { false },
     onUserClick: (User) -> Unit = {},
     onAgree: (SubPostList) -> Unit = {},
@@ -583,6 +609,19 @@ private fun SubPostItem(
     onMenuDeleteClick: ((SubPostList) -> Unit)? = null,
 ) {
     val (subPost, contentRenders, blocked) = item
+    // 楼中楼内容由 PbContent.renders 直接生成，默认不携带 PhotoViewData，
+    // 导致图片无法点击全屏（点击事件会冒泡到外层 LongClickMenu 的回复操作）。
+    // 这里补上与楼层一致的 PhotoViewData，使楼中楼图片可正常全屏查看。
+    val contentRendersWithPhotoViewData = remember(
+        contentRenders, forumId, forumName, threadId, postId
+    ) {
+        contentRenders.withPhotoViewData(
+            forumId = forumId,
+            forumName = forumName,
+            threadId = threadId,
+            postId = postId
+        )
+    }
     val context = LocalContext.current
     val navigator = LocalNavigator.current
     val account = LocalAccount.current
@@ -704,7 +743,7 @@ private fun SubPostItem(
                             .padding(start = Sizes.Small + 8.dp)
                             .fillMaxWidth()
                     ) {
-                        contentRenders.fastForEach { it.Render() }
+                        contentRendersWithPhotoViewData.fastForEach { it.Render() }
                     }
                 }
             )
