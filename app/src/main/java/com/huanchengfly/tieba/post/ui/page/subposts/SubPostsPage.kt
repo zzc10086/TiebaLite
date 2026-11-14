@@ -51,7 +51,6 @@ import com.huanchengfly.tieba.post.arch.collectPartialAsState
 import com.huanchengfly.tieba.post.arch.onEvent
 import com.huanchengfly.tieba.post.arch.pageViewModel
 import com.huanchengfly.tieba.post.arch.wrapImmutable
-import com.huanchengfly.tieba.post.ui.common.PicContentRender
 import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import com.huanchengfly.tieba.post.ui.common.theme.compose.threadBottomBar
 import com.huanchengfly.tieba.post.ui.page.LocalNavigator
@@ -64,7 +63,7 @@ import com.huanchengfly.tieba.post.ui.page.reply.ReplyDialog
 import com.huanchengfly.tieba.post.ui.page.thread.PostAgreeBtn
 import com.huanchengfly.tieba.post.ui.page.thread.PostCard
 import com.huanchengfly.tieba.post.ui.page.thread.UserNameText
-import com.huanchengfly.tieba.post.ui.utils.getPhotoViewData
+import com.huanchengfly.tieba.post.ui.utils.withPhotoViewData
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.BlockTip
 import com.huanchengfly.tieba.post.ui.widgets.compose.BlockableContent
@@ -216,6 +215,23 @@ internal fun SubPostsContent(
         prop1 = SubPostsUiState::hasMore,
         initial = true
     )
+
+    val floorPostId = post?.get { id } ?: postId
+    val contentForumId = forum?.get { id } ?: forumId
+    val contentForumName = forum?.get { name } ?: ""
+    // pb/floor 响应不携带 from_forum/tid，Post.contentRenders 无法生成
+    // PhotoViewData，导致楼层图片点击无效。这里按页面已知的 forum/thread
+    // 上下文为楼层内容补齐 PhotoViewData。
+    val postContentRendersWithPhotoViewData = remember(
+        postContentRenders, contentForumId, contentForumName, threadId, floorPostId
+    ) {
+        postContentRenders.withPhotoViewData(
+            forumId = contentForumId,
+            forumName = contentForumName,
+            threadId = threadId,
+            postId = floorPostId
+        )
+    }
 
     val lazyListState = rememberLazyListState()
 
@@ -439,7 +455,7 @@ internal fun SubPostsContent(
                             Column {
                                 PostCard(
                                     postHolder = it,
-                                    contentRenders = postContentRenders,
+                                    contentRenders = postContentRendersWithPhotoViewData,
                                     canDelete = { it.author_id == account?.uid?.toLongOrNull() || it.author?.id == account?.uid?.toLongOrNull() || thread?.get { author?.id } ==  account?.uid?.toLongOrNull() },
                                         showSubPosts = false,
                                     onUserClick = {
@@ -510,10 +526,10 @@ internal fun SubPostsContent(
                             item = item,
                             canDelete = { it.author_id == account?.uid?.toLongOrNull() || it.author?.id == account?.uid?.toLongOrNull() || thread?.get { author?.id } ==  account?.uid?.toLongOrNull() },
                             threadAuthorId = thread?.get { author?.id },
-                            forumId = forum?.get { id } ?: forumId,
-                            forumName = forum?.get { name } ?: "",
+                            forumId = contentForumId,
+                            forumName = contentForumName,
                             threadId = threadId,
-                            postId = post?.get { id } ?: postId,
+                            postId = floorPostId,
                             onUserClick = {
                                 navigator.navigate(UserProfilePageDestination(it.id))
                             },
@@ -599,29 +615,12 @@ private fun SubPostItem(
     val contentRendersWithPhotoViewData = remember(
         contentRenders, forumId, forumName, threadId, postId
     ) {
-        if (forumId == 0L || threadId == 0L) {
-            contentRenders
-        } else {
-            contentRenders.map { render ->
-                if (render is PicContentRender && render.photoViewData == null) {
-                    render.copy(
-                        photoViewData = getPhotoViewData(
-                            forumId = forumId,
-                            forumName = forumName,
-                            threadId = threadId,
-                            postId = postId,
-                            picId = render.picId,
-                            picUrl = render.picUrl,
-                            originUrl = render.originUrl,
-                            showOriginBtn = render.showOriginBtn,
-                            originSize = render.originSize
-                        )
-                    )
-                } else {
-                    render
-                }
-            }
-        }
+        contentRenders.withPhotoViewData(
+            forumId = forumId,
+            forumName = forumName,
+            threadId = threadId,
+            postId = postId
+        )
     }
     val context = LocalContext.current
     val navigator = LocalNavigator.current
